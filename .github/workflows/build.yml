@@ -1,0 +1,54 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build .exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name "BugMD-Video-Renamer"
+          --collect-binaries pymediainfo
+          main.py
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist/BugMD-Video-Renamer.exe package/
+          python -c "import json; from renamer.settings import DEFAULT_SETTINGS as s; json.dump(s, open('package/settings.json', 'w'), indent=2)"
+          Copy-Item README.md package/
+          Compress-Archive -Path package/* -DestinationPath BugMD-Video-Renamer.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BugMD-Video-Renamer
+          path: package/
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BugMD-Video-Renamer.zip
