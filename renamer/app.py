@@ -9,7 +9,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from . import core, ops
 from .media import read_resolution
-from .settings import APP_NAME, load_settings, load_state, save_state
+from .settings import APP_NAME, load_settings, load_state, save_settings, save_state
+from .widgets import DateField, SetupDialog
 
 SHARED_FIELDS = ["task", "script", "pest_angle", "brand", "product", "channel",
                  "project_type", "test_type", "date", "strategist", "editor", "intro"]
@@ -31,12 +32,13 @@ class App(tk.Tk):
         self.minsize(1000, 600)
         if self.tk.call("tk", "windowingsystem") == "win32":
             self.state("zoomed")
-        self.settings, self.settings_path, settings_warning = load_settings()
+        self.settings, settings_warning = load_settings()
         self.state_data = load_state()
         self.rows: list[core.FileRow] = []
         self.vars = {k: tk.StringVar() for k in SHARED_FIELDS}
         self.folder = tk.StringVar(value=self.state_data.get("folder", ""))
         self.editor_widget = None
+        self.problems: list[str] = []
 
         self._build()
         self._restore_state()
@@ -48,6 +50,8 @@ class App(tk.Tk):
         if self.folder.get():
             self.load_folder(quiet=True)
         self.refresh()
+        if not self.state_data.get("setup_complete"):
+            self.after(300, lambda: self.open_setup(first_run=True))
 
     # --- layout ------------------------------------------------------------
 
@@ -67,9 +71,15 @@ class App(tk.Tk):
         box = ttk.LabelFrame(self, text="ClickUp task (applies to every file)", padding=8)
         box.pack(fill="x", padx=10, pady=8)
         self.widgets = {}
+        self.labels = {}
+
+        def label(row, col, key):
+            lbl = ttk.Label(box, text=core.FIELD_LABELS[key] + ":")
+            lbl.grid(row=row, column=col * 2, sticky="e", **pad)
+            self.labels[key] = lbl
 
         def add(row, col, key, kind, values=None, width=22):
-            ttk.Label(box, text=core.FIELD_LABELS[key] + ":").grid(row=row, column=col * 2, sticky="e", **pad)
+            label(row, col, key)
             if kind == "entry":
                 w = ttk.Entry(box, textvariable=self.vars[key], width=width + 3)
             else:
@@ -87,18 +97,18 @@ class App(tk.Tk):
         add(1, 2, "channel", "pick", s["channels"])
         add(2, 0, "project_type", "pick", list(s["project_types"]))
         add(2, 1, "test_type", "combo")
-        ttk.Label(box, text="Date:").grid(row=2, column=4, sticky="e", **pad)
-        date_box = ttk.Frame(box)
-        date_box.grid(row=2, column=5, sticky="w", **pad)
-        ttk.Entry(date_box, textvariable=self.vars["date"], width=14).pack(side="left")
-        ttk.Button(date_box, text="Today", width=7, command=self._set_today).pack(side="left", padx=(6, 0))
+        label(2, 2, "date")
+        self.date_field = DateField(box, self.vars["date"], s["date_format"])
+        self.date_field.grid(row=2, column=5, sticky="w", **pad)
+        ttk.Button(box, text="Clear all fields", command=self.clear_fields).grid(
+            row=0, column=6, sticky="w", padx=(24, 6))
         add(3, 0, "strategist", "pick", [""] + s["strategists"])
         add(3, 1, "editor", "pick", s["editors"])
         add(3, 2, "intro", "pick", s["intro_styles"])
         ttk.Label(box, text="(Intro sets all files; change single files in the table)",
                   foreground="#666").grid(row=4, column=4, columnspan=2, sticky="w", padx=6)
-        ttk.Label(box, text="Optional: Pest_Angle, Test Type, Strategist",
-                  foreground="#666").grid(row=4, column=0, columnspan=3, sticky="w", padx=6)
+        ttk.Label(box, text="Optional: Pest_Angle, Test Type, Strategist. Missing fields turn red.",
+                  foreground="#666").grid(row=4, column=0, columnspan=4, sticky="w", padx=6)
 
         mid = ttk.Frame(self, padding=(10, 0))
         mid.pack(fill="both", expand=True)
@@ -130,7 +140,7 @@ class App(tk.Tk):
         buttons = ttk.Frame(bottom)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Remove selected", command=self.remove_selected).pack(side="left")
-        ttk.Button(buttons, text="Open settings.json", command=self.open_settings).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Setup (dropdown lists)...", command=self.open_setup).pack(side="left", padx=6)
         self.rename_btn = ttk.Button(buttons, text="Rename", command=self.rename)
         self.rename_btn.pack(side="right")
         ttk.Button(buttons, text="Undo last rename", command=self.undo).pack(side="right", padx=6)
@@ -156,7 +166,14 @@ class App(tk.Tk):
         self.destroy()
 
     def _set_today(self):
-        self.vars["date"].set(datetime.now().strftime(self.settings["date_format"]))
+        self.date_field.set_today()
+
+    def clear_fields(self):
+        """Empty every ClickUp field; the date goes back to today."""
+        for key, var in self.vars.items():
+            if key != "date":
+                var.set("")
+        self._set_today()
 
     # --- events ------------------------------------------------------------
 
@@ -229,21 +246,24 @@ class App(tk.Tk):
         self.rows = [r for i, r in enumerate(self.rows) if i not in drop]
         self.refresh()
 
-    def open_settings(self):
-        import os
-        import subprocess
-        import sys
-        path = str(self.settings_path)
-        try:
-            if sys.platform.startswith("win"):
-                os.startfile(path)  # noqa: S606
-            else:
-                subprocess.Popen(["xdg-open", path])
-        except OSError as e:
-            messagebox.showerror(APP_NAME, str(e))
-            return
-        messagebox.showinfo(APP_NAME, "After saving settings.json, close and reopen the app "
-                            "to load the new lists.")
+    def open_setup(self, first_run=False):
+        SetupDialog(self, self.settings, self.apply_settings, first_run=first_run)
+
+    def apply_settings(self, new: dict):
+        save_settings(new)
+        self.settings = new
+        self.state_data["setup_complete"] = True
+        self._save()
+        s = self.settings
+        for key, values in (("brand", list(s["brands"])), ("channel", s["channels"]),
+                            ("project_type", list(s["project_types"])),
+                            ("strategist", [""] + s["strategists"]), ("editor", s["editors"]),
+                            ("intro", s["intro_styles"])):
+            self.widgets[key]["values"] = values
+            if self.vars[key].get() not in values:
+                self.vars[key].set("")
+        self._update_dependent_lists()
+        self.refresh()
 
     # --- preview -----------------------------------------------------------
 
@@ -265,14 +285,25 @@ class App(tk.Tk):
         bad = [r for r in self.rows if not r.ok]
         if bad:
             problems.append(f"{len(bad)} file(s) need attention (see Status)")
+        missing_keys = set(core.missing_fields(shared, self.settings["required_fields"]))
+        # Intro lives on each file, so it is only missing when a file has none.
+        missing_keys.discard("intro")
+        if not self.vars["intro"].get() and (not self.rows or any(not r.intro for r in self.rows)):
+            missing_keys.add("intro")
+        for key, lbl in self.labels.items():
+            lbl.config(foreground="#b00020" if key in missing_keys else "")
         to_rename = [r for r in self.rows if r.ok and r.status != "Unchanged"]
 
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(self.rows):
             tag = "bad" if not r.ok else ("warn" if r.warnings else "good")
-            new = r.new_name if not missing else "(fill in the fields above)"
+            status, new = r.status, r.new_name
+            if missing:
+                new = "(fill in the red fields above)"
+                if r.ok:
+                    tag, status = "warn", "Waiting for fields above"
             self.tree.insert("", "end", iid=str(i), tags=(tag,), values=(
-                r.path.name, r.resolution, r.variation, r.intro, r.format, r.status, new))
+                r.path.name, r.resolution, r.variation, r.intro, r.format, status, new))
 
         if not self.rows:
             problems.insert(0, "Choose a folder with videos.")
@@ -281,9 +312,9 @@ class App(tk.Tk):
         if not problems:
             self.message.config(text=f"Ready to rename {len(to_rename)} file(s)." if to_rename
                                 else "All files already have these names.")
-        ok = not problems and bool(to_rename)
-        self.rename_btn.config(text=f"Rename {len(to_rename)} file(s)",
-                               state="normal" if ok else "disabled")
+        self.problems = problems
+        self.rename_btn.config(text=f"Rename {len(to_rename)} file(s)" if to_rename and not problems
+                               else "Rename")
 
     # --- cell editing ------------------------------------------------------
 
@@ -338,9 +369,13 @@ class App(tk.Tk):
 
     def rename(self):
         self.refresh()
-        if str(self.rename_btn["state"]) == "disabled":
-            return
         todo = [r for r in self.rows if r.ok and r.status != "Unchanged"]
+        if self.problems:
+            messagebox.showwarning(APP_NAME, "Can't rename yet:\n\n\u2022 " + "\n\u2022 ".join(self.problems))
+            return
+        if not todo:
+            messagebox.showinfo(APP_NAME, "All files already have these names.")
+            return
         folder = todo[0].path.parent
         sample = "\n".join(f"  {r.path.name}  →  {r.new_name}" for r in todo[:5])
         more = f"\n  ...and {len(todo) - 5} more" if len(todo) > 5 else ""

@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -13,7 +14,8 @@ DEFAULT_SETTINGS = {
     "_help": (
         "Edit the lists below to add or remove dropdown options. "
         "name_template controls the final name; a segment between underscores "
-        "is dropped when all of its fields are empty."
+        "is dropped when all of its fields are empty. Most people edit these lists "
+        "with the Setup button in the app instead."
     ),
     "name_template": (
         "{task}-{variation}_{intro}_{brand}_{product}_{channel}_{format}_"
@@ -67,28 +69,72 @@ def user_data_dir() -> Path:
     return path
 
 
-def load_settings(path: Path | None = None) -> tuple[dict, Path, str | None]:
-    """Return (settings, path, warning). Writes defaults if the file is missing.
+def user_settings_path() -> Path:
+    return user_data_dir() / SETTINGS_FILENAME
 
-    Keys missing from the file fall back to the defaults so an older or
-    partially edited settings.json keeps working.
+
+def load_settings() -> tuple[dict, str | None]:
+    """Return (settings, warning).
+
+    Lists come from, in order: this user's own setup (AppData), the shared
+    settings.json next to the .exe, then the built-in defaults. Keys missing
+    from a file fall back to the defaults so older files keep working.
     """
-    path = path or app_dir() / SETTINGS_FILENAME
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     warning = None
-    if path.exists():
+    for path in (user_settings_path(), app_dir() / SETTINGS_FILENAME):
+        if not path.exists():
+            continue
         try:
             with open(path, encoding="utf-8") as f:
                 settings.update(json.load(f))
+            break
         except (OSError, ValueError) as e:
-            warning = f"Could not read {path.name} ({e}). Using built-in defaults."
-    else:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_SETTINGS, f, indent=2)
-        except OSError:
-            pass  # read-only location; defaults still work
-    return settings, path, warning
+            warning = f"Could not read {path} ({e}). Using built-in defaults."
+    return settings, warning
+
+
+def save_settings(settings: dict) -> Path:
+    path = user_settings_path()
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+    return path
+
+
+# --- text <-> list conversion used by the setup screen ------------------------
+
+def list_to_text(items: list[str]) -> str:
+    return "\n".join(items)
+
+
+def text_to_list(text: str) -> list[str]:
+    """One option per line (commas also split). Blanks and repeats removed."""
+    seen = []
+    for part in re.split(r"[\n,]", text):
+        part = part.strip()
+        if part and part not in seen:
+            seen.append(part)
+    return seen
+
+
+def mapping_to_text(mapping: dict[str, list[str]]) -> str:
+    return "\n".join(f"{k}: {', '.join(v)}" for k, v in mapping.items())
+
+
+def text_to_mapping(text: str) -> dict[str, list[str]]:
+    """Lines like 'BMD: EPC, VMS, FNT'. A line without ':' is a name with no options."""
+    mapping = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        name, _, rest = line.partition(":")
+        name = name.strip()
+        if name:
+            mapping.setdefault(name, [])
+            for item in text_to_list(rest):
+                if item not in mapping[name]:
+                    mapping[name].append(item)
+    return mapping
 
 
 def load_state() -> dict:

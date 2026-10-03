@@ -18,12 +18,27 @@ Unzip it anywhere and keep `BugMD-Video-Renamer.exe` and `settings.json` togethe
 Windows SmartScreen may warn the first time because the app isn't code-signed:
 click **More info → Run anyway**.
 
+## First launch: Setup
+
+The first time each person opens the app, a **Setup** screen asks for the options in every
+dropdown: brands and their products, project types and their test types, channels,
+formats, intro styles, strategists and editors. It starts filled with the current
+BugMD lists, so edit what's different and click **Save**. Reopen it any time with
+**Setup (dropdown lists)...** at the bottom of the window.
+
+Setup is saved per Windows user (in `%APPDATA%\BugMD-Video-Renamer\settings.json`).
+The `settings.json` next to the .exe is only the starting point for people who haven't
+saved their own setup yet, so a team can share one file to pre-fill everyone's lists.
+
 ## How to use
 
 1. Paste the folder path (or click **Browse...**) and press **Load / Refresh**.
    The app lists the videos directly in that folder (not subfolders).
 2. Fill in the ClickUp task fields once. They apply to every file.
-   Pest_Angle, Test Type and Strategist are optional; empty ones are left out of the name.
+   Required fields that are still empty have **red labels**. Pest_Angle, Test Type and
+   Strategist are optional; empty ones are left out of the name.
+   Click the date box (or the calendar button) to pick a date. **Clear all fields**
+   empties every field and resets the date to today.
 3. Check the table. Each file gets:
    - **Var**: the first number in the original filename (ignoring the task number,
      resolutions like `1080x1920`, ratios like `9x16`, `1080p`, `4K` and dates).
@@ -34,8 +49,8 @@ click **More info → Run anyway**.
 
    Double-click Var, Intro or Format to change a single file. Select rows and press
    **Delete** to leave files out.
-4. Click **Rename**. Red rows (duplicates, missing values, a name that already exists)
-   block renaming until they're fixed.
+4. Click **Rename**. If anything is missing or wrong (an empty field, duplicate names,
+   a name that already exists), the app tells you exactly what to fix instead.
 5. **Undo last rename** restores the original names of the most recent batch.
 
 Typed values are cleaned automatically: spaces at the ends are trimmed, repeated
@@ -43,13 +58,12 @@ underscores collapse, leading/trailing underscores are removed, and characters W
 doesn't allow are dropped. Your last-used field values are remembered (the date always
 starts as today).
 
-## Changing the dropdown lists
+## Advanced settings
 
-Click **Open settings.json** (or edit the file next to the .exe), save, and restart the
-app. You can change brands and their products, channels, formats, intro styles,
-strategists, editors, project types and their test types, which fields are required,
-and even the order of the name (`name_template`). If the file is deleted, the app
-recreates it with the defaults.
+`settings.json` also holds things the Setup screen doesn't show: which fields are
+required (`required_fields`), the order of the name (`name_template`), the date format,
+and which file extensions count as videos. Edit your own copy in
+`%APPDATA%\BugMD-Video-Renamer\` (or the shared one next to the .exe), then restart.
 
 ## Development
 
@@ -60,4 +74,5 @@ python main.py
 ```
 
 Code lives in `renamer/`: `core.py` (naming rules), `media.py` (reads video resolution),
-`ops.py` (renaming and undo), `settings.py` (lists and remembered values), `app.py` (window).
+`ops.py` (renaming and undo), `settings.py` (lists and remembered values),
+`widgets.py` (calendar and Setup screen), `app.py` (main window).
