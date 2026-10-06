@@ -22,8 +22,8 @@ DEFAULT_SETTINGS = {
         "{strategist}_{editor}_{script}_{project_type}_{test_type}_{pest_angle}_{date}"
     ),
     "required_fields": [
-        "task", "variation", "intro", "brand", "product", "channel", "format",
-        "editor", "script", "project_type", "date",
+        "task", "variation", "brand", "product", "channel", "format",
+        "editor", "script", "date",
     ],
     "date_format": "%d-%m-%Y",
     "format_prefix": "VID-",
@@ -53,6 +53,14 @@ DEFAULT_SETTINGS = {
         "Unproven": ["ScriptTest"],
     },
 }
+
+
+# Earlier versions' required list. Saved copies of it are upgraded on load so
+# people who already ran Setup get the new optional fields too.
+_OLD_DEFAULT_REQUIRED = [
+    ["task", "variation", "intro", "brand", "product", "channel", "format",
+     "editor", "script", "project_type", "date"],
+]
 
 
 def app_dir() -> Path:
@@ -91,6 +99,8 @@ def load_settings() -> tuple[dict, str | None]:
             break
         except (OSError, ValueError) as e:
             warning = f"Could not read {path} ({e}). Using built-in defaults."
+    if settings.get("required_fields") in _OLD_DEFAULT_REQUIRED:
+        settings["required_fields"] = list(DEFAULT_SETTINGS["required_fields"])
     return settings, warning
 
 

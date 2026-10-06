@@ -80,6 +80,7 @@ class App(tk.Tk):
 
         def add(row, col, key, kind, values=None, width=22):
             label(row, col, key)
+            values = self._choices(key, values or [])
             if kind == "entry":
                 w = ttk.Entry(box, textvariable=self.vars[key], width=width + 3)
             else:
@@ -102,12 +103,14 @@ class App(tk.Tk):
         self.date_field.grid(row=2, column=5, sticky="w", **pad)
         ttk.Button(box, text="Clear all fields", command=self.clear_fields).grid(
             row=0, column=6, sticky="w", padx=(24, 6))
-        add(3, 0, "strategist", "pick", [""] + s["strategists"])
+        add(3, 0, "strategist", "pick", s["strategists"])
         add(3, 1, "editor", "pick", s["editors"])
         add(3, 2, "intro", "pick", s["intro_styles"])
         ttk.Label(box, text="(Intro sets all files; change single files in the table)",
                   foreground="#666").grid(row=4, column=4, columnspan=2, sticky="w", padx=6)
-        ttk.Label(box, text="Optional: Pest_Angle, Test Type, Strategist. Missing fields turn red.",
+        optional = [core.FIELD_LABELS[k] for k in SHARED_FIELDS
+                    if k not in s["required_fields"]]
+        ttk.Label(box, text=f"Optional: {', '.join(optional)}. Missing required fields turn red.",
                   foreground="#666").grid(row=4, column=0, columnspan=4, sticky="w", padx=6)
 
         mid = ttk.Frame(self, padding=(10, 0))
@@ -257,13 +260,21 @@ class App(tk.Tk):
         s = self.settings
         for key, values in (("brand", list(s["brands"])), ("channel", s["channels"]),
                             ("project_type", list(s["project_types"])),
-                            ("strategist", [""] + s["strategists"]), ("editor", s["editors"]),
+                            ("strategist", s["strategists"]), ("editor", s["editors"]),
                             ("intro", s["intro_styles"])):
+            values = self._choices(key, values)
             self.widgets[key]["values"] = values
             if self.vars[key].get() not in values:
                 self.vars[key].set("")
         self._update_dependent_lists()
         self.refresh()
+
+    def _choices(self, key: str, values: list[str]) -> list[str]:
+        """Dropdown options; optional fields get a blank first entry so they can be emptied."""
+        values = list(values)
+        if key not in self.settings["required_fields"] and "" not in values:
+            values.insert(0, "")
+        return values
 
     # --- preview -----------------------------------------------------------
 
@@ -288,7 +299,8 @@ class App(tk.Tk):
         missing_keys = set(core.missing_fields(shared, self.settings["required_fields"]))
         # Intro lives on each file, so it is only missing when a file has none.
         missing_keys.discard("intro")
-        if not self.vars["intro"].get() and (not self.rows or any(not r.intro for r in self.rows)):
+        if ("intro" in self.settings["required_fields"] and not self.vars["intro"].get()
+                and (not self.rows or any(not r.intro for r in self.rows))):
             missing_keys.add("intro")
         for key, lbl in self.labels.items():
             lbl.config(foreground="#b00020" if key in missing_keys else "")
@@ -330,7 +342,7 @@ class App(tk.Tk):
         var = tk.StringVar(value=getattr(row, col))
         if col == "intro":
             widget = ttk.Combobox(self.tree, textvariable=var, state="readonly",
-                                  values=self.settings["intro_styles"])
+                                  values=self._choices("intro", self.settings["intro_styles"]))
         elif col == "format":
             values = list(self.settings["formats"])
             if row.format and row.format not in values:

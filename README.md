@@ -35,8 +35,9 @@ saved their own setup yet, so a team can share one file to pre-fill everyone's l
 1. Paste the folder path (or click **Browse...**) and press **Load / Refresh**.
    The app lists the videos directly in that folder (not subfolders).
 2. Fill in the ClickUp task fields once. They apply to every file.
-   Required fields that are still empty have **red labels**. Pest_Angle, Test Type and
-   Strategist are optional; empty ones are left out of the name.
+   Required fields that are still empty have **red labels**. Pest_Angle, Project Type,
+   Test Type, Strategist and Intro Style are optional; empty ones are left out of the name
+   (pick the blank entry at the top of a dropdown to empty it).
    Click the date box (or the calendar button) to pick a date. **Clear all fields**
    empties every field and resets the date to today.
 3. Check the table. Each file gets:

@@ -90,3 +90,12 @@ def test_parse_existing():
     stem = "BM-75415-3_CL_BMD_VMS_META_VID-1080x1080_DAV_ART_Script_Unproven_03-10-2026"
     assert core.parse_existing(stem, S["intro_styles"]) == {"intro": "CL", "format": "VID-1080x1080"}
     assert core.parse_existing("hook alt", S["intro_styles"]) == {}
+
+
+def test_intro_and_project_type_are_optional(tmp_path):
+    rows = _rows(tmp_path, ["a.mp4"])
+    rows[0].intro = ""
+    missing = core.evaluate_batch(rows, dict(SHARED, project_type=""), S)
+    assert missing == [] and rows[0].ok
+    assert rows[0].new_name == (
+        "BM-75415-1_BMD_VMS_META_VID-1080x1920_DAV_ART_BigBeautifulSale_MICE_25_03-10-2026.mp4")
