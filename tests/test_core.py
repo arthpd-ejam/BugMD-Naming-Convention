@@ -41,6 +41,21 @@ def test_extract_variation_first_number():
     assert ev("03") == 3
 
 
+def test_extract_variation_skips_years_and_dropdown_values():
+    ev = core.extract_variation
+    ignore = core.dropdown_values(S)
+    assert ev("BM-75298 2026 Intro2", "BM-75298", ignore) == 2
+    assert ev("2026_hook_3", "", ignore) == 3
+    assert ev("BM-75298_VEO3_v2", "BM-75298", ignore) == 2
+    assert ev("VEO3 IntroTest_VEO3 cut 4", "", ignore) == 4
+    assert ev("DJI_20261003_0007", "", ignore) == 7
+    assert ev("Intro 5 take 1") == 5
+    assert ev("intro_12_9x16") == 12
+    assert ev("IntroTest 6") == 6
+    # A name this app produced: the number after the task wins, even with Intro/years later.
+    assert ev("BM-75298-3_VEO3_BMD_Intro9_06-10-2026", "BM-75298", ignore) == 3
+
+
 def test_assign_variations_fills_gaps_after_highest():
     assert core.assign_variations(["a", "b", "c"]) == [1, 2, 3]
     assert core.assign_variations(["v2", "intro", "v5", "x"]) == [2, 6, 5, 7]

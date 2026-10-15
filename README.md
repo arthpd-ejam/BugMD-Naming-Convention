@@ -41,8 +41,11 @@ saved their own setup yet, so a team can share one file to pre-fill everyone's l
    Click the date box (or the calendar button) to pick a date. **Clear all fields**
    empties every field and resets the date to today.
 3. Check the table. Each file gets:
-   - **Var**: the first number in the original filename (ignoring the task number,
-     resolutions like `1080x1920`, ratios like `9x16`, `1080p`, `4K` and dates).
+   - **Var**: the number after "Intro" in the original filename (`Intro2`, `Intro 2`,
+     `intro_2`), otherwise the first number left after ignoring the task number,
+     resolutions like `1080x1920`, ratios like `9x16`, `1080p`, `4K`, dates, years like
+     `2026`, long numbers (compact dates, camera clip IDs) and dropdown values that
+     contain digits (like `VEO3`). Files this app already renamed keep their number.
      Files without a number get the next numbers after the highest one found
      (1, 2, 3... if none have numbers).
    - **Intro**: the Intro Style chosen above.

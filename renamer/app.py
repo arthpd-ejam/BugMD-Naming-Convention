@@ -200,7 +200,8 @@ class App(tk.Tk):
 
     def _reassign_variations(self):
         auto = [r for r in self.rows if not r.variation_edited]
-        numbers = core.assign_variations([r.path.stem for r in auto], self.vars["task"].get())
+        numbers = core.assign_variations([r.path.stem for r in auto], self.vars["task"].get(),
+                                         core.dropdown_values(self.settings))
         for row, n in zip(auto, numbers):
             row.variation = str(n)
 

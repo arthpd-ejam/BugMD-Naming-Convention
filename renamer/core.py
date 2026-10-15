@@ -54,22 +54,37 @@ def build_name(template: str, values: dict) -> str:
     return name
 
 
-def extract_variation(stem: str, task: str = "") -> int | None:
-    """First number in the filename, ignoring the task number, resolutions,
-    aspect ratios, dates and the like."""
+_YEAR_OR_LONG = re.compile(r"(?<!\d)(?:(?:19|20)\d{2}|\d{5,})(?!\d)")  # 2026, 20261003
+_INTRO_NUMBER = re.compile(r"intro(?![a-z])[\s_#-]*(\d+)", re.IGNORECASE)    # Intro2, intro_2
+
+
+def extract_variation(stem: str, task: str = "", ignore: tuple[str, ...] = ()) -> int | None:
+    """Variation number in a filename, in order of preference:
+    1. the number right after the task number in a name this app made (BM-75415-3_...)
+    2. the number after "Intro" (Intro2, Intro 2, intro_2)
+    3. the first number left after removing the task number, resolutions, ratios,
+       dates, years, long numbers and any dropdown values with digits (e.g. VEO3)."""
     s = stem
-    if task.strip():
-        s = re.sub(re.escape(task.strip()), " ", s, flags=re.IGNORECASE)
+    task = task.strip()
+    if task:
+        m = re.search(re.escape(task) + r"-(\d+)(?!\d)", s, flags=re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        s = re.sub(re.escape(task), " ", s, flags=re.IGNORECASE)
+    for token in sorted({t for t in ignore if t and re.search(r"\d", t)}, key=len, reverse=True):
+        s = re.sub(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])", " ", s,
+                   flags=re.IGNORECASE)
     for pattern in _NOT_VARIATION:
         s = pattern.sub(" ", s)
-    m = re.search(r"\d+", s)
-    return int(m.group()) if m else None
+    s = _YEAR_OR_LONG.sub(" ", s)
+    m = _INTRO_NUMBER.search(s) or re.search(r"\d+", s)
+    return int(m.group(m.lastindex or 0)) if m else None
 
 
-def assign_variations(stems: list[str], task: str = "") -> list[int]:
+def assign_variations(stems: list[str], task: str = "", ignore: tuple[str, ...] = ()) -> list[int]:
     """Variation per file. Files without a number get the next numbers after the
     highest found (or 1, 2, 3... when no file has one)."""
-    found = [extract_variation(s, task) for s in stems]
+    found = [extract_variation(s, task, ignore) for s in stems]
     next_num = max((v for v in found if v is not None), default=0) + 1
     result = []
     for v in found:
@@ -77,6 +92,17 @@ def assign_variations(stems: list[str], task: str = "") -> list[int]:
             v, next_num = next_num, next_num + 1
         result.append(v)
     return result
+
+
+def dropdown_values(settings: dict) -> tuple[str, ...]:
+    """Every option in the dropdown lists (used to keep e.g. 'VEO3' from being read
+    as variation 3)."""
+    values = list(settings.get("intro_styles", [])) + list(settings.get("formats", []))
+    values += settings.get("channels", []) + settings.get("strategists", []) + settings.get("editors", [])
+    for mapping in (settings.get("brands", {}), settings.get("project_types", {})):
+        for k, items in mapping.items():
+            values += [k, *items]
+    return tuple(values)
 
 
 def parse_existing(stem: str, intro_styles: list[str], format_prefix: str = "VID-") -> dict:
