@@ -7,16 +7,16 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import core, ops
+from . import core, ops, theme
 from .media import read_resolution
 from .settings import APP_NAME, load_settings, load_state, save_settings, save_state
 from .widgets import DateField, SetupDialog
 
 SHARED_FIELDS = ["task", "script", "pest_angle", "brand", "product", "channel",
                  "project_type", "test_type", "date", "strategist", "editor", "intro"]
-COLUMNS = [("file", "Original file", 230), ("res", "Resolution", 95),
-           ("variation", "Var", 50), ("intro", "Intro", 70), ("format", "Format", 130),
-           ("status", "Status", 190), ("new", "New name", 760)]
+COLUMNS = [("file", "Original file", 300), ("res", "Resolution", 100),
+           ("variation", "Var", 55), ("intro", "Intro", 75), ("format", "Format", 135),
+           ("status", "Status", 240), ("new", "New name", 760)]
 EDITABLE = {"variation", "intro", "format"}
 
 
@@ -28,12 +28,14 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1350x760")
+        self.geometry("1400x900")
         self.minsize(1000, 600)
         if self.tk.call("tk", "windowingsystem") == "win32":
             self.state("zoomed")
         self.settings, settings_warning = load_settings()
         self.state_data = load_state()
+        self.theme_mode = self.state_data.get("theme") or theme.system_mode()
+        self.palette = theme.apply(self, self.theme_mode)
         self.rows: list[core.FileRow] = []
         self.vars = {k: tk.StringVar() for k in SHARED_FIELDS}
         self.folder = tk.StringVar(value=self.state_data.get("folder", ""))
@@ -41,6 +43,7 @@ class App(tk.Tk):
         self.problems: list[str] = []
 
         self._build()
+        theme.reset_labels(self)
         self._restore_state()
         for k, var in self.vars.items():
             var.trace_add("write", lambda *_, key=k: self._on_field_change(key))
@@ -57,97 +60,146 @@ class App(tk.Tk):
 
     def _build(self):
         s = self.settings
-        pad = {"padx": 6, "pady": 4}
 
-        top = ttk.Frame(self, padding=(10, 10, 10, 0))
-        top.pack(fill="x")
-        ttk.Label(top, text="Video folder:").pack(side="left")
-        entry = ttk.Entry(top, textvariable=self.folder)
-        entry.pack(side="left", fill="x", expand=True, padx=6)
+        # Header: title on the left, dark mode + setup on the right.
+        header = ttk.Frame(self, padding=(20, 16, 20, 8))
+        header.pack(fill="x")
+        titles = ttk.Frame(header)
+        titles.pack(side="left")
+        ttk.Label(titles, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
+        ttk.Label(titles, text="Batch-rename videos to the BugMD naming convention",
+                  style="Subtitle.TLabel").pack(anchor="w")
+        ttk.Button(header, text="\u2699  Setup", command=self.open_setup).pack(side="right")
+        self.dark_var = tk.BooleanVar(value=self.theme_mode == "dark")
+        ttk.Checkbutton(header, text="Dark mode", style="Switch.TCheckbutton",
+                        variable=self.dark_var, command=self.toggle_theme).pack(side="right", padx=16)
+
+        body = ttk.Frame(self, padding=(20, 0, 20, 0))
+        body.pack(fill="both", expand=True)
+
+        # 1. Folder
+        folder_card = ttk.Frame(body, style="Card.TFrame", padding=(16, 12))
+        folder_card.pack(fill="x", pady=(8, 0))
+        ttk.Label(folder_card, text="1   Video folder", style="Section.TLabel").pack(anchor="w")
+        row = ttk.Frame(folder_card)
+        row.pack(fill="x", pady=(8, 0))
+        entry = ttk.Entry(row, textvariable=self.folder)
+        entry.pack(side="left", fill="x", expand=True)
         entry.bind("<Return>", lambda e: self.load_folder())
-        ttk.Button(top, text="Browse...", command=self.browse).pack(side="left")
-        ttk.Button(top, text="Load / Refresh", command=self.load_folder).pack(side="left", padx=(6, 0))
+        ttk.Button(row, text="Browse\u2026", command=self.browse).pack(side="left", padx=(8, 0))
+        ttk.Button(row, text="\u21bb  Refresh", command=self.load_folder).pack(side="left", padx=(8, 0))
 
-        box = ttk.LabelFrame(self, text="ClickUp task (applies to every file)", padding=8)
-        box.pack(fill="x", padx=10, pady=8)
+        # 2. ClickUp fields: label above each input, four per row.
+        fields_card = ttk.Frame(body, style="Card.TFrame", padding=(16, 12))
+        fields_card.pack(fill="x", pady=(12, 0))
+        head = ttk.Frame(fields_card)
+        head.pack(fill="x")
+        ttk.Label(head, text="2   ClickUp task", style="Section.TLabel").pack(side="left")
+        ttk.Label(head, text="applies to every file \u2022 required fields turn red when empty",
+                  style="Muted.TLabel").pack(side="left", padx=10)
+        ttk.Button(head, text="Clear all fields", command=self.clear_fields).pack(side="right")
+        grid = ttk.Frame(fields_card)
+        grid.pack(fill="x", pady=(6, 0))
+        for c in range(4):
+            grid.columnconfigure(c, weight=1, uniform="field")
         self.widgets = {}
         self.labels = {}
 
-        def label(row, col, key):
-            lbl = ttk.Label(box, text=core.FIELD_LABELS[key] + ":")
-            lbl.grid(row=row, column=col * 2, sticky="e", **pad)
+        def cell(r, c, key):
+            frame = ttk.Frame(grid)
+            frame.grid(row=r, column=c, sticky="ew", padx=(0 if c == 0 else 12, 0), pady=4)
+            text = core.FIELD_LABELS[key]
+            if key not in s["required_fields"]:
+                text += "  (optional)"
+            lbl = ttk.Label(frame, text=text, style="Field.TLabel")
+            lbl.pack(anchor="w", pady=(0, 2))
             self.labels[key] = lbl
+            return frame
 
-        def add(row, col, key, kind, values=None, width=22):
-            label(row, col, key)
+        def add(r, c, key, kind, values=None):
+            frame = cell(r, c, key)
             values = self._choices(key, values or [])
             if kind == "entry":
-                w = ttk.Entry(box, textvariable=self.vars[key], width=width + 3)
+                w = ttk.Entry(frame, textvariable=self.vars[key])
             else:
-                w = ttk.Combobox(box, textvariable=self.vars[key], values=values or [],
-                                 width=width, state="readonly" if kind == "pick" else "normal")
-            w.grid(row=row, column=col * 2 + 1, sticky="w", **pad)
+                w = ttk.Combobox(frame, textvariable=self.vars[key], values=values,
+                                 state="readonly" if kind == "pick" else "normal")
+            w.pack(fill="x")
             self.widgets[key] = w
             return w
 
         add(0, 0, "task", "entry")
         add(0, 1, "script", "entry")
         add(0, 2, "pest_angle", "entry")
+        self.date_field = DateField(cell(0, 3, "date"), self.vars["date"], s["date_format"])
+        self.date_field.pack(fill="x")
         add(1, 0, "brand", "pick", list(s["brands"]))
         add(1, 1, "product", "pick")
         add(1, 2, "channel", "pick", s["channels"])
+        add(1, 3, "editor", "pick", s["editors"])
         add(2, 0, "project_type", "pick", list(s["project_types"]))
         add(2, 1, "test_type", "combo")
-        label(2, 2, "date")
-        self.date_field = DateField(box, self.vars["date"], s["date_format"])
-        self.date_field.grid(row=2, column=5, sticky="w", **pad)
-        ttk.Button(box, text="Clear all fields", command=self.clear_fields).grid(
-            row=0, column=6, sticky="w", padx=(24, 6))
-        add(3, 0, "strategist", "pick", s["strategists"])
-        add(3, 1, "editor", "pick", s["editors"])
-        add(3, 2, "intro", "pick", s["intro_styles"])
-        ttk.Label(box, text="(Intro sets all files; change single files in the table)",
-                  foreground="#666").grid(row=4, column=4, columnspan=2, sticky="w", padx=6)
-        optional = [core.FIELD_LABELS[k] for k in SHARED_FIELDS
-                    if k not in s["required_fields"]]
-        ttk.Label(box, text=f"Optional: {', '.join(optional)}. Missing required fields turn red.",
-                  foreground="#666").grid(row=4, column=0, columnspan=4, sticky="w", padx=6)
+        add(2, 2, "strategist", "pick", s["strategists"])
+        add(2, 3, "intro", "pick", s["intro_styles"])
 
-        mid = ttk.Frame(self, padding=(10, 0))
-        mid.pack(fill="both", expand=True)
-        self.tree = ttk.Treeview(mid, columns=[c[0] for c in COLUMNS], show="headings",
+        # 3. Preview table
+        files_card = ttk.Frame(body, style="Card.TFrame", padding=(16, 12))
+        files_card.pack(fill="both", expand=True, pady=(12, 0))
+        head = ttk.Frame(files_card)
+        head.pack(fill="x")
+        ttk.Label(head, text="3   Preview", style="Section.TLabel").pack(side="left")
+        self.summary = ttk.Label(head, text="", style="Muted.TLabel")
+        self.summary.pack(side="left", padx=10)
+        ttk.Button(head, text="Remove selected", command=self.remove_selected).pack(side="right")
+        ttk.Button(head, text="Fix duplicates", command=self.fix_duplicates).pack(side="right", padx=8)
+        ttk.Label(files_card, text="Intro Style above sets every file. Double-click Var, Intro or "
+                  "Format to change one file \u2022 select rows and press Delete to leave files out.",
+                  style="Muted.TLabel").pack(anchor="w", pady=(2, 8))
+        table = ttk.Frame(files_card)
+        table.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(table, columns=[c[0] for c in COLUMNS], show="headings",
                                  selectmode="extended")
         for key, title, width in COLUMNS:
-            self.tree.heading(key, text=title + (" ✎" if key in EDITABLE else ""))
+            self.tree.heading(key, text=title + (" \u270e" if key in EDITABLE else ""), anchor="w")
             self.tree.column(key, width=width, minwidth=40, stretch=key == "new", anchor="w")
-        self.tree.tag_configure("bad", foreground="#b00020")
-        self.tree.tag_configure("warn", foreground="#a15c00")
-        self.tree.tag_configure("good", foreground="#1b6e20")
-        ys = ttk.Scrollbar(mid, orient="vertical", command=self.tree.yview)
-        xs = ttk.Scrollbar(mid, orient="horizontal", command=self.tree.xview)
+        ys = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        xs = ttk.Scrollbar(table, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=ys.set, xscrollcommand=xs.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
         ys.grid(row=0, column=1, sticky="ns")
         xs.grid(row=1, column=0, sticky="ew")
-        mid.rowconfigure(0, weight=1)
-        mid.columnconfigure(0, weight=1)
+        table.rowconfigure(0, weight=1)
+        table.columnconfigure(0, weight=1)
         self.tree.bind("<Double-1>", self._edit_cell)
         self.tree.bind("<Delete>", lambda e: self.remove_selected())
+        self.empty_label = ttk.Label(self.tree, text="Choose a folder with videos to get started",
+                                     style="Subtitle.TLabel", background=self.palette["bg"])
+        self._color_tags()
 
-        bottom = ttk.Frame(self, padding=10)
-        bottom.pack(fill="x")
-        ttk.Label(bottom, text="Double-click Var, Intro or Format to change one file. "
-                  "Select rows + Delete to leave files out.", foreground="#666").pack(anchor="w")
-        self.message = ttk.Label(bottom, text="", foreground="#b00020")
-        self.message.pack(anchor="w", pady=(4, 6))
-        buttons = ttk.Frame(bottom)
-        buttons.pack(fill="x")
-        ttk.Button(buttons, text="Remove selected", command=self.remove_selected).pack(side="left")
-        ttk.Button(buttons, text="Fix duplicates", command=self.fix_duplicates).pack(side="left", padx=(6, 0))
-        ttk.Button(buttons, text="Setup (dropdown lists)...", command=self.open_setup).pack(side="left", padx=6)
-        self.rename_btn = ttk.Button(buttons, text="Rename", command=self.rename)
+        # Footer: status message and the main actions.
+        footer = ttk.Frame(self, padding=(20, 12, 20, 16))
+        footer.pack(fill="x", side="bottom", before=body)  # always visible, even in a short window
+        self.message = ttk.Label(footer, text="", style="Error.TLabel")
+        self.message.pack(side="left", fill="x", expand=True)
+        self.rename_btn = ttk.Button(footer, text="Rename", style="Accent.TButton", command=self.rename)
         self.rename_btn.pack(side="right")
-        ttk.Button(buttons, text="Undo last rename", command=self.undo).pack(side="right", padx=6)
+        ttk.Button(footer, text="\u21b6  Undo last rename", command=self.undo).pack(side="right", padx=8)
+
+    def _color_tags(self):
+        p = self.palette
+        self.tree.tag_configure("bad", foreground=p["error"])
+        self.tree.tag_configure("warn", foreground=p["warn"])
+        self.tree.tag_configure("good", foreground=p["ok"])
+        self.tree.tag_configure("same", foreground=p["muted"])
+        self.empty_label.configure(background=self.palette["bg"])
+
+    def toggle_theme(self):
+        self.theme_mode = "dark" if self.dark_var.get() else "light"
+        self.palette = theme.apply(self, self.theme_mode)
+        self._color_tags()  # after apply(): the empty-table label keeps an explicit background
+        self.state_data["theme"] = self.theme_mode
+        save_state(self.state_data)
+        self.refresh()
 
     # --- state -------------------------------------------------------------
 
@@ -315,27 +367,39 @@ class App(tk.Tk):
                 and (not self.rows or any(not r.intro for r in self.rows))):
             missing_keys.add("intro")
         for key, lbl in self.labels.items():
-            lbl.config(foreground="#b00020" if key in missing_keys else "")
+            lbl.config(style="Missing.TLabel" if key in missing_keys else "Field.TLabel")
         to_rename = [r for r in self.rows if r.ok and r.status != "Unchanged"]
 
+        icons = {"good": "\u2713", "warn": "\u26a0", "bad": "\u2715", "same": "\u2013"}
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(self.rows):
             tag = "bad" if not r.ok else ("warn" if r.warnings else "good")
+            if r.ok and r.status == "Unchanged":
+                tag = "same"
             status, new = r.status, r.new_name
             if missing:
                 new = "(fill in the red fields above)"
                 if r.ok:
                     tag, status = "warn", "Waiting for fields above"
             self.tree.insert("", "end", iid=str(i), tags=(tag,), values=(
-                r.path.name, r.resolution, r.variation, r.intro, r.format, status, new))
+                r.path.name, r.resolution, r.variation, r.intro, r.format,
+                f"{icons[tag]}  {status}", new))
 
-        if not self.rows:
+        if self.rows:
+            self.empty_label.place_forget()
+            ready = sum(r.ok for r in self.rows)
+            issues = len(self.rows) - ready
+            self.summary.config(text=f"{len(self.rows)} file(s) \u2022 {ready} ready"
+                                + (f" \u2022 {issues} need attention" if issues else ""))
+        else:
+            self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
+            self.summary.config(text="")
             problems.insert(0, "Choose a folder with videos.")
-        self.message.config(text="   •   ".join(problems),
-                            foreground="#b00020" if problems else "#1b6e20")
-        if not problems:
-            self.message.config(text=f"Ready to rename {len(to_rename)} file(s)." if to_rename
-                                else "All files already have these names.")
+        if problems:
+            self.message.config(text="\u26a0  " + "   \u2022   ".join(problems), style="Error.TLabel")
+        else:
+            self.message.config(text=f"\u2713  Ready to rename {len(to_rename)} file(s)." if to_rename
+                                else "\u2713  All files already have these names.", style="Ok.TLabel")
         self.problems = problems
         self.rename_btn.config(text=f"Rename {len(to_rename)} file(s)" if to_rename and not problems
                                else "Rename")

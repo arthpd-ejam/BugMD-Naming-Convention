@@ -24,11 +24,17 @@ The first time each person opens the app, a **Setup** screen asks for the option
 dropdown: brands and their products, project types and their test types, channels,
 formats, intro styles, strategists and editors. It starts filled with the current
 BugMD lists, so edit what's different and click **Save**. Reopen it any time with
-**Setup (dropdown lists)...** at the bottom of the window.
+the **Setup** button in the top-right corner.
 
 Setup is saved per Windows user (in `%APPDATA%\BugMD-Video-Renamer\settings.json`).
 The `settings.json` next to the .exe is only the starting point for people who haven't
 saved their own setup yet, so a team can share one file to pre-fill everyone's lists.
+
+## Look and feel
+
+The app uses a Windows 11 style theme with a **Dark mode** switch in the top-right
+corner. The first launch follows your Windows light/dark setting; after that your
+choice is remembered.
 
 ## How to use
 
@@ -85,4 +91,4 @@ python main.py
 
 Code lives in `renamer/`: `core.py` (naming rules), `media.py` (reads video resolution),
 `ops.py` (renaming and undo), `settings.py` (lists and remembered values),
-`widgets.py` (calendar and Setup screen), `app.py` (main window).
+`widgets.py` (calendar and Setup screen), `theme.py` (light/dark theme), `app.py` (main window).
