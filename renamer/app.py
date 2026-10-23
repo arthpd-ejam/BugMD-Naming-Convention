@@ -143,6 +143,7 @@ class App(tk.Tk):
         buttons = ttk.Frame(bottom)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Remove selected", command=self.remove_selected).pack(side="left")
+        ttk.Button(buttons, text="Fix duplicates", command=self.fix_duplicates).pack(side="left", padx=(6, 0))
         ttk.Button(buttons, text="Setup (dropdown lists)...", command=self.open_setup).pack(side="left", padx=6)
         self.rename_btn = ttk.Button(buttons, text="Rename", command=self.rename)
         self.rename_btn.pack(side="right")
@@ -244,6 +245,16 @@ class App(tk.Tk):
         if not files and not quiet:
             messagebox.showinfo(APP_NAME, "No video files found in this folder.")
         self.refresh()
+
+    def fix_duplicates(self):
+        dupes = [r for r in self.rows if r.status == "Duplicate name"]
+        if not dupes:
+            messagebox.showinfo(APP_NAME, "There are no duplicate names.")
+            return
+        changed = core.fix_duplicates(self.rows, self.shared_values(), self.settings)
+        self.refresh()
+        messagebox.showinfo(APP_NAME, f"Gave {changed} file(s) new variation numbers. "
+                            "Check the Var column, and double-click a number to change it.")
 
     def remove_selected(self):
         drop = {int(i) for i in self.tree.selection()}

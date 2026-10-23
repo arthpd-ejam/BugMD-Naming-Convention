@@ -114,3 +114,30 @@ def test_intro_and_project_type_are_optional(tmp_path):
     assert missing == [] and rows[0].ok
     assert rows[0].new_name == (
         "BM-75415-1_BMD_VMS_META_VID-1080x1920_DAV_ART_BigBeautifulSale_MICE_25_03-10-2026.mp4")
+
+
+def test_marked_version_number_beats_first_number():
+    ev = core.extract_variation
+    ignore = core.dropdown_values(S)
+    assert ev("BM-75914_3Oils_9x16_roughcut_v7_motion", "BM-75957", ignore) == 7
+    assert ev("BM-75914_3Oils_9x16_roughcut_v8_K2", "BM-75957", ignore) == 8
+    assert ev("BM-75914_3Oils_v7_4x5", "BM-75914", ignore) == 7
+    assert ev("3Oils var_2", "", ignore) == 2
+    assert ev("Intro3_v7", "", ignore) == 3          # Intro number still wins
+    assert ev("VEO3 hook 4", "", ignore) == 4         # VEO3 is not "v" + number
+    assert ev("BM-75957-5_BMD_v9", "BM-75957", ignore) == 5
+    # No v-number: skip "3Oils", use a real number or none at all.
+    assert ev("BM-75914_3Oils_final2_4x5", "BM-75957", ignore) == 2
+    assert ev("BM-75914_3Oils_final_4x5", "BM-75957", ignore) is None
+    assert core.assign_variations(["3Oils_v7", "3Oils_v8", "3Oils_final"], "", ignore) == [7, 8, 9]
+
+
+def test_fix_duplicates_keeps_format_pairs(tmp_path):
+    rows = _rows(tmp_path, ["a_9x16.mp4", "b_9x16.mp4", "a_4x5.mp4", "b_4x5.mp4", "c.mp4"])
+    for r in rows:
+        r.variation = "3"
+    rows[2].format = rows[3].format = "VID-1080x1350"
+    rows[4].variation, rows[4].format = "4", "VID-1080x1080"
+    assert core.fix_duplicates(rows, SHARED, S) == 2
+    assert [r.variation for r in rows] == ["3", "5", "3", "5", "4"]
+    assert all(r.ok for r in rows)

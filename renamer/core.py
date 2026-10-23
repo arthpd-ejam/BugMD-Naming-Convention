@@ -56,13 +56,16 @@ def build_name(template: str, values: dict) -> str:
 
 _YEAR_OR_LONG = re.compile(r"(?<!\d)(?:(?:19|20)\d{2}|\d{5,})(?!\d)")  # 2026, 20261003
 _INTRO_NUMBER = re.compile(r"intro(?![a-z])[\s_#-]*(\d+)", re.IGNORECASE)    # Intro2, intro_2
+_MARKED_NUMBER = re.compile(                                                   # v7, var_2, version 3
+    r"(?<![a-z])(?:variation|version|var|ver|v)[\s_#-]*(\d+)(?!\d)", re.IGNORECASE)
 
 
 def extract_variation(stem: str, task: str = "", ignore: tuple[str, ...] = ()) -> int | None:
     """Variation number in a filename, in order of preference:
     1. the number right after the task number in a name this app made (BM-75415-3_...)
     2. the number after "Intro" (Intro2, Intro 2, intro_2)
-    3. the first number left after removing the task number, resolutions, ratios,
+    3. the number after v / var / ver / version / variation (v7, V8, var_2)
+    4. the first number (not glued to the front of a word like 3Oils) left after removing the task number, resolutions, ratios,
        dates, years, long numbers and any dropdown values with digits (e.g. VEO3)."""
     s = stem
     task = task.strip()
@@ -77,7 +80,9 @@ def extract_variation(stem: str, task: str = "", ignore: tuple[str, ...] = ()) -
     for pattern in _NOT_VARIATION:
         s = pattern.sub(" ", s)
     s = _YEAR_OR_LONG.sub(" ", s)
-    m = _INTRO_NUMBER.search(s) or re.search(r"\d+", s)
+    # A number glued to the front of a word (3Oils, 2nd) is part of a name, not a variation.
+    m = (_INTRO_NUMBER.search(s) or _MARKED_NUMBER.search(s)
+         or re.search(r"\d+(?![0-9A-Za-z])", s))
     return int(m.group(m.lastindex or 0)) if m else None
 
 
@@ -137,6 +142,27 @@ class FileRow:
     status: str = ""
     ok: bool = False
     warnings: list[str] = field(default_factory=list)
+
+
+def fix_duplicates(rows: list[FileRow], shared: dict, settings: dict) -> int:
+    """Give clashing files new variation numbers. In each group of identical names
+    the first file keeps its number; the 2nd, 3rd... get the next free numbers.
+    The same position in different groups gets the same new number, so the 9x16
+    and 4x5 cuts of one variation stay paired. Returns how many files changed."""
+    evaluate_batch(rows, shared, settings)
+    groups: dict[str, list[FileRow]] = {}
+    for row in rows:
+        if row.status == "Duplicate name":
+            groups.setdefault(row.new_name.lower(), []).append(row)
+    used = [int(r.variation) for r in rows if clean_value(r.variation).isdigit()]
+    base = max(used, default=0)
+    changed = 0
+    for group in groups.values():
+        for k, row in enumerate(group[1:], 1):
+            row.variation, row.variation_edited = str(base + k), True
+            changed += 1
+    evaluate_batch(rows, shared, settings)
+    return changed
 
 
 def missing_fields(values: dict, required: list[str]) -> list[str]:

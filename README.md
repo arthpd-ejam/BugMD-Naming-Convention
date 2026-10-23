@@ -41,18 +41,24 @@ saved their own setup yet, so a team can share one file to pre-fill everyone's l
    Click the date box (or the calendar button) to pick a date. **Clear all fields**
    empties every field and resets the date to today.
 3. Check the table. Each file gets:
-   - **Var**: the number after "Intro" in the original filename (`Intro2`, `Intro 2`,
-     `intro_2`), otherwise the first number left after ignoring the task number,
-     resolutions like `1080x1920`, ratios like `9x16`, `1080p`, `4K`, dates, years like
-     `2026`, long numbers (compact dates, camera clip IDs) and dropdown values that
-     contain digits (like `VEO3`). Files this app already renamed keep their number.
-     Files without a number get the next numbers after the highest one found
-     (1, 2, 3... if none have numbers).
+   - **Var**, in order of preference:
+     1. the number after "Intro" (`Intro2`, `Intro 2`, `intro_2`);
+     2. a marked version number (`v7`, `V8`, `var_2`, `version 3`);
+     3. otherwise the first plain number, ignoring the task number, resolutions like
+        `1080x1920`, ratios like `9x16`, `1080p`, `4K`, dates, years like `2026`, long
+        numbers (compact dates, camera clip IDs), dropdown values with digits (like
+        `VEO3`) and numbers glued to the front of a word (like `3Oils`).
+
+     Files this app already renamed keep their number. Files without a number get the
+     next numbers after the highest one found (1, 2, 3... if none have numbers).
    - **Intro**: the Intro Style chosen above.
    - **Format**: read from the video's resolution. Sizes not in the list are flagged orange.
 
    Double-click Var, Intro or Format to change a single file. Select rows and press
    **Delete** to leave files out.
+   If two files still end up with the same name, click **Fix duplicates**: in each
+   clashing group the first file keeps its number and the others get the next free
+   numbers (the 9x16 and 4x5 cuts of one variation stay paired).
 4. Click **Rename**. If anything is missing or wrong (an empty field, duplicate names,
    a name that already exists), the app tells you exactly what to fix instead.
 5. **Undo last rename** restores the original names of the most recent batch.
