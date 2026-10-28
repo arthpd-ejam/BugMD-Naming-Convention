@@ -122,6 +122,22 @@ results.append(f"toggle prepared styles   : {timed(prepared)}")
 app.tk.eval("proc tk_setPalette args {}")
 results.append(f"prepared w/o setPalette  : {timed(prepared)}")
 
+# Same window on Tk's built-in flat "clam" theme, switching colors only.
+st = ttk.Style(app)
+st.theme_use("clam")
+app.update()
+flat = {"dark": ("#1c1c1c", "#fafafa", "#2b2b2b"), "light": ("#fafafa", "#1c1c1c", "#ffffff")}
+
+
+def clam_swap():
+    app.theme_mode = other()
+    bg, fg, field = flat[app.theme_mode]
+    st.configure(".", background=bg, foreground=fg, fieldbackground=field)
+    st.configure("Treeview", background=field, fieldbackground=field, foreground=fg)
+
+
+results.append(f"flat theme color swap    : {timed(clam_swap)}")
+
 report = "\n".join(results)
 print(report)
 summary = os.environ.get("GITHUB_STEP_SUMMARY")
