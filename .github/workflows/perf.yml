@@ -1,0 +1,18 @@
+name: Theme switch timing (temporary)
+
+on:
+  push:
+    branches: ["claude/**"]
+    paths: ["tools/perf_theme.py", ".github/workflows/perf.yml", "renamer/**"]
+  workflow_dispatch:
+
+jobs:
+  perf:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python tools/perf_theme.py
