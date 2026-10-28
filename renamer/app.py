@@ -41,6 +41,8 @@ class App(tk.Tk):
         self.folder = tk.StringVar(value=self.state_data.get("folder", ""))
         self.editor_widget = None
         self.problems: list[str] = []
+        self.existing: set[str] = set()   # names in the folder, read once per load
+        self._refresh_job = None
 
         self._build()
         theme.reset_labels(self)
@@ -195,11 +197,13 @@ class App(tk.Tk):
 
     def toggle_theme(self):
         self.theme_mode = "dark" if self.dark_var.get() else "light"
-        self.palette = theme.apply(self, self.theme_mode)
-        self._color_tags()  # after apply(): the empty-table label keeps an explicit background
+        with theme.frozen(self):
+            self.palette = theme.apply(self, self.theme_mode)
+            self._color_tags()  # after apply(): the empty-table label keeps an explicit background
+            self.update()       # let sv_ttk's theme-change handlers run before repainting
+            self.refresh()
         self.state_data["theme"] = self.theme_mode
         save_state(self.state_data)
-        self.refresh()
 
     # --- state -------------------------------------------------------------
 
@@ -249,7 +253,13 @@ class App(tk.Tk):
                 row.intro = self.vars["intro"].get()
         if key == "task":
             self._reassign_variations()
-        self.refresh()
+        self.schedule_refresh()
+
+    def schedule_refresh(self, delay_ms: int = 150):
+        """Refresh once typing pauses instead of on every keystroke."""
+        if self._refresh_job is not None:
+            self.after_cancel(self._refresh_job)
+        self._refresh_job = self.after(delay_ms, self.refresh)
 
     def _reassign_variations(self):
         auto = [r for r in self.rows if not r.variation_edited]
@@ -270,8 +280,10 @@ class App(tk.Tk):
             if not quiet:
                 messagebox.showerror(APP_NAME, f"Folder not found:\n{folder}")
             self.rows = []
+            self.existing = set()
             self.refresh()
             return
+        self.existing = core.folder_names(folder)
         exts = {e.lower() for e in self.settings["video_extensions"]}
         files = sorted((p for p in folder.iterdir()
                         if p.is_file() and p.suffix.lower() in exts and not p.name.startswith(".")),
@@ -299,6 +311,7 @@ class App(tk.Tk):
         self.refresh()
 
     def fix_duplicates(self):
+        self.refresh()
         dupes = [r for r in self.rows if r.status == "Duplicate name"]
         if not dupes:
             messagebox.showinfo(APP_NAME, "There are no duplicate names.")
@@ -346,9 +359,12 @@ class App(tk.Tk):
         return {k: v.get() for k, v in self.vars.items() if k != "intro"}
 
     def refresh(self):
+        if self._refresh_job is not None:
+            self.after_cancel(self._refresh_job)
+            self._refresh_job = None
         shared = self.shared_values()
         problems = []
-        missing = core.evaluate_batch(self.rows, shared, self.settings)
+        missing = core.evaluate_batch(self.rows, shared, self.settings, self.existing)
         if missing:
             problems.append("Fill in: " + ", ".join(missing))
         date = shared.get("date", "").strip()
@@ -367,11 +383,19 @@ class App(tk.Tk):
                 and (not self.rows or any(not r.intro for r in self.rows))):
             missing_keys.add("intro")
         for key, lbl in self.labels.items():
-            lbl.config(style="Missing.TLabel" if key in missing_keys else "Field.TLabel")
+            style = "Missing.TLabel" if key in missing_keys else "Field.TLabel"
+            if str(lbl.cget("style")) != style:
+                lbl.config(style=style)
         to_rename = [r for r in self.rows if r.ok and r.status != "Unchanged"]
 
         icons = {"good": "\u2713", "warn": "\u26a0", "bad": "\u2715", "same": "\u2013"}
-        self.tree.delete(*self.tree.get_children())
+        # Update rows in place (rebuilding the whole table on every change flickers
+        # and is slow); only add/remove rows when the count changes.
+        current = self.tree.get_children()
+        if len(current) != len(self.rows):
+            self.tree.delete(*current)
+            for i in range(len(self.rows)):
+                self.tree.insert("", "end", iid=str(i))
         for i, r in enumerate(self.rows):
             tag = "bad" if not r.ok else ("warn" if r.warnings else "good")
             if r.ok and r.status == "Unchanged":
@@ -381,9 +405,11 @@ class App(tk.Tk):
                 new = "(fill in the red fields above)"
                 if r.ok:
                     tag, status = "warn", "Waiting for fields above"
-            self.tree.insert("", "end", iid=str(i), tags=(tag,), values=(
-                r.path.name, r.resolution, r.variation, r.intro, r.format,
-                f"{icons[tag]}  {status}", new))
+            values = (r.path.name, r.resolution, r.variation, r.intro, r.format,
+                      f"{icons[tag]}  {status}", new)
+            item = self.tree.item(str(i))
+            if tuple(str(v) for v in item["values"]) != values or tuple(item["tags"]) != (tag,):
+                self.tree.item(str(i), values=values, tags=(tag,))
 
         if self.rows:
             self.empty_label.place_forget()
@@ -479,6 +505,7 @@ class App(tk.Tk):
         self._save()
         for row in todo:  # keep per-file choices instead of re-reading the folder
             row.path = row.path.with_name(row.new_name)
+        self.existing = core.folder_names(folder)
         self.refresh()
         messagebox.showinfo(APP_NAME, f"Renamed {len(done)} file(s).")
 

@@ -3,6 +3,7 @@ colors for text, statuses and plain tk widgets."""
 
 import sys
 import tkinter as tk
+from contextlib import contextmanager
 from tkinter import ttk
 
 import sv_ttk
@@ -70,6 +71,32 @@ def apply(root: tk.Tk, mode: str) -> dict:
         if isinstance(child, tk.Toplevel):
             style_window(child)
     return p
+
+
+@contextmanager
+def frozen(root: tk.Tk):
+    """Pause window painting on Windows while the UI changes, then repaint once.
+    Without this, a theme switch repaints widget by widget and looks laggy."""
+    hwnd = None
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            root.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+            ctypes.windll.user32.SendMessageW(hwnd, 0x000B, 0, 0)  # WM_SETREDRAW off
+        except Exception:
+            hwnd = None
+    try:
+        yield
+        root.update_idletasks()  # finish all layout and drawing work while hidden
+    finally:
+        if hwnd:
+            import ctypes
+            user32 = ctypes.windll.user32
+            user32.SendMessageW(hwnd, 0x000B, 1, 0)  # WM_SETREDRAW on
+            # RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW
+            user32.RedrawWindow(hwnd, None, None, 0x0004 | 0x0400 | 0x0001 | 0x0080 | 0x0100)
+            root.update_idletasks()
 
 
 def reset_labels(widget: tk.Misc) -> None:

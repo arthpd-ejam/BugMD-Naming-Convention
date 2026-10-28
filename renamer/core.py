@@ -1,6 +1,7 @@
 """Pure naming logic: cleaning values, building names, picking variation numbers,
 and validating a batch before it is renamed. No GUI or file-system writes here."""
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -169,14 +170,30 @@ def missing_fields(values: dict, required: list[str]) -> list[str]:
     return [k for k in required if not clean_value(values.get(k, ""))]
 
 
-def evaluate_batch(rows: list[FileRow], shared: dict, settings: dict) -> list[str]:
+def folder_names(folder: Path) -> set[str]:
+    """Lower-cased names of everything in a folder (one directory read)."""
+    try:
+        return {name.lower() for name in os.listdir(folder)}
+    except OSError:
+        return set()
+
+
+def evaluate_batch(rows: list[FileRow], shared: dict, settings: dict,
+                   existing: set[str] | None = None) -> list[str]:
     """Compute new names and statuses in place. Returns batch-level problems
-    (missing shared fields); per-file problems are written to each row."""
+    (missing shared fields); per-file problems are written to each row.
+
+    existing: lower-cased names already in the folder. Pass a cached set to avoid
+    touching the disk (slow on Windows/network drives when called per keystroke)."""
     required = settings["required_fields"]
     per_file = {"variation", "intro", "format"}
     batch_missing = [k for k in missing_fields(shared, required) if k not in per_file]
     known_formats = set(settings.get("formats", []))
-    batch_paths = {r.path.resolve() for r in rows}
+    if existing is None:
+        existing = set()
+        for parent in {r.path.parent for r in rows}:
+            existing |= folder_names(parent)
+    batch_names = {r.path.name.lower() for r in rows}
 
     for row in rows:
         values = dict(shared, variation=row.variation, intro=row.intro, format=row.format)
@@ -208,8 +225,7 @@ def evaluate_batch(rows: list[FileRow], shared: dict, settings: dict) -> list[st
             other = seen[key]
             if other.ok:
                 other.status, other.ok = "Duplicate name", False
-        elif (target.exists() and target.resolve() not in batch_paths
-              and row.path.name.lower() != row.new_name.lower()):
+        elif key in existing and key not in batch_names:
             row.status, row.ok = "A file with this name already exists", False
         elif row.path.name == row.new_name:
             row.status = "Unchanged"
