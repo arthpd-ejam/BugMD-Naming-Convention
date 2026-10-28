@@ -72,15 +72,55 @@ def repaint_only():
     app.geometry(f"{w}x1040")
 
 
+import sv_ttk  # noqa: E402
+from tkinter import ttk  # noqa: E402
+
 results = [f"widgets: {count(app)}", f"tk scaling: {app.tk.call('tk', 'scaling')}"]
-results.append(f"full repaint only        : {timed(repaint_only)}")
 results.append(f"toggle (current build)   : {timed(current)}")
 results.append(f"toggle without freeze    : {timed(plain)}")
-results.append(f"toggle hidden (withdraw) : {timed(withdrawn)}")
 
-# Without sv_ttk's tk_setPalette walk over every widget.
-app.tk.eval("""proc tk_setPalette args {}""")
-results.append(f"toggle w/o tk_setPalette : {timed(plain)}")
+
+def other():
+    return "light" if app.theme_mode == "dark" else "dark"
+
+
+def step_theme_use():
+    app.theme_mode = other()
+    sv_ttk.set_theme(app.theme_mode, app)
+
+
+def step_styles():
+    p = theme.PALETTES[app.theme_mode]
+    st = ttk.Style(app)
+    for name in ("Subtitle.TLabel", "Muted.TLabel", "Field.TLabel"):
+        st.configure(name, foreground=p["muted"])
+    st.configure("Missing.TLabel", foreground=p["error"])
+    st.configure("Treeview", rowheight=32)
+
+
+results.append(f"step: sv_ttk.set_theme   : {timed(step_theme_use)}")
+results.append(f"step: style configures   : {timed(step_styles)}")
+results.append(f"step: refresh()          : {timed(app.refresh)}")
+results.append(f"step: reset_labels       : {timed(lambda: theme.reset_labels(app))}")
+results.append(f"step: style_window       : {timed(lambda: theme.style_window(app))}")
+
+# Prepared styles: configure custom styles once per theme, then a switch is theme_use only.
+for mode in ("dark", "light"):
+    theme.apply(app, mode)
+app.update()
+
+
+def prepared():
+    app.theme_mode = other()
+    sv_ttk.set_theme(app.theme_mode, app)
+    app.palette = theme.PALETTES[app.theme_mode]
+    app._color_tags()
+    app.configure(background=app.palette["bg"])
+
+
+results.append(f"toggle prepared styles   : {timed(prepared)}")
+app.tk.eval("proc tk_setPalette args {}")
+results.append(f"prepared w/o setPalette  : {timed(prepared)}")
 
 report = "\n".join(results)
 print(report)
