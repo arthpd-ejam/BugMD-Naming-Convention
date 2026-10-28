@@ -1,5 +1,3 @@
-# Runtime: sv-ttk provides the modern light/dark (Windows 11 style) theme.
-sv-ttk>=2.6
-# pymediainfo is an optional fallback for
+# Runtime: standard library (tkinter) only. pymediainfo is an optional fallback for
 # formats the built-in reader doesn't parse (e.g. MXF); it is bundled in the .exe.
 pymediainfo>=6.1

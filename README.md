@@ -32,8 +32,8 @@ saved their own setup yet, so a team can share one file to pre-fill everyone's l
 
 ## Look and feel
 
-The app uses a Windows 11 style theme with a **Dark mode** switch in the top-right
-corner. The first launch follows your Windows light/dark setting; after that your
+The app uses a flat light/dark theme with a **Dark mode** switch in the top-right
+corner (it switches instantly). The first launch follows your Windows light/dark setting; after that your
 choice is remembered.
 
 ## How to use

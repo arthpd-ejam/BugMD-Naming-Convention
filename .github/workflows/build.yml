@@ -31,7 +31,6 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed
           --name "BugMD-Video-Renamer"
           --collect-binaries pymediainfo
-          --collect-data sv_ttk
           main.py
 
       - name: Package

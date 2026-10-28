@@ -10,12 +10,12 @@ from tkinter import filedialog, messagebox, ttk
 from . import core, ops, theme
 from .media import read_resolution
 from .settings import APP_NAME, load_settings, load_state, save_settings, save_state
-from .widgets import DateField, SetupDialog
+from .widgets import DateField, SetupDialog, ToggleSwitch
 
 SHARED_FIELDS = ["task", "script", "pest_angle", "brand", "product", "channel",
                  "project_type", "test_type", "date", "strategist", "editor", "intro"]
-COLUMNS = [("file", "Original file", 300), ("res", "Resolution", 100),
-           ("variation", "Var", 55), ("intro", "Intro", 75), ("format", "Format", 135),
+COLUMNS = [("file", "Original file", 300), ("res", "Resolution", 115),
+           ("variation", "Var", 60), ("intro", "Intro", 75), ("format", "Format", 150),
            ("status", "Status", 240), ("new", "New name", 760)]
 EDITABLE = {"variation", "intro", "format"}
 
@@ -45,7 +45,6 @@ class App(tk.Tk):
         self._refresh_job = None
 
         self._build()
-        theme.reset_labels(self)
         self._restore_state()
         for k, var in self.vars.items():
             var.trace_add("write", lambda *_, key=k: self._on_field_change(key))
@@ -73,8 +72,11 @@ class App(tk.Tk):
                   style="Subtitle.TLabel").pack(anchor="w")
         ttk.Button(header, text="\u2699  Setup", command=self.open_setup).pack(side="right")
         self.dark_var = tk.BooleanVar(value=self.theme_mode == "dark")
-        ttk.Checkbutton(header, text="Dark mode", style="Switch.TCheckbutton",
-                        variable=self.dark_var, command=self.toggle_theme).pack(side="right", padx=16)
+        dark_label = ttk.Label(header, text="Dark mode", cursor="hand2")
+        dark_label.pack(side="right", padx=(8, 18))
+        self.dark_switch = ToggleSwitch(header, self.dark_var, command=self.toggle_theme)
+        self.dark_switch.pack(side="right")
+        dark_label.bind("<Button-1>", self.dark_switch.toggle)
 
         body = ttk.Frame(self, padding=(20, 0, 20, 0))
         body.pack(fill="both", expand=True)
@@ -175,7 +177,7 @@ class App(tk.Tk):
         self.tree.bind("<Double-1>", self._edit_cell)
         self.tree.bind("<Delete>", lambda e: self.remove_selected())
         self.empty_label = ttk.Label(self.tree, text="Choose a folder with videos to get started",
-                                     style="Subtitle.TLabel", background=self.palette["bg"])
+                                     style="Empty.TLabel")
         self._color_tags()
 
         # Footer: status message and the main actions.
@@ -193,15 +195,11 @@ class App(tk.Tk):
         self.tree.tag_configure("warn", foreground=p["warn"])
         self.tree.tag_configure("good", foreground=p["ok"])
         self.tree.tag_configure("same", foreground=p["muted"])
-        self.empty_label.configure(background=self.palette["bg"])
 
     def toggle_theme(self):
         self.theme_mode = "dark" if self.dark_var.get() else "light"
-        with theme.frozen(self):
-            self.palette = theme.apply(self, self.theme_mode)
-            self._color_tags()  # after apply(): the empty-table label keeps an explicit background
-            self.update()       # let sv_ttk's theme-change handlers run before repainting
-            self.refresh()
+        self.palette = theme.apply(self, self.theme_mode)
+        self._color_tags()
         self.state_data["theme"] = self.theme_mode
         save_state(self.state_data)
 

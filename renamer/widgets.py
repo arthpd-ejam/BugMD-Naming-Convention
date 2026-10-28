@@ -40,7 +40,6 @@ class DatePicker(tk.Toplevel):
 
         self.bind("<Escape>", lambda e: self.destroy())
         self._draw()
-        theme.reset_labels(self)
         # Open under the date box, but keep the whole calendar on screen.
         self.update_idletasks()
         x = min(anchor.winfo_rootx(), self.winfo_screenwidth() - self.winfo_reqwidth() - 8)
@@ -76,11 +75,49 @@ class DatePicker(tk.Toplevel):
                 if style == "Accent.TButton":
                     b.configure(padding=(0, 2))
                 b.grid(row=r, column=c, padx=1, pady=1)
-        theme.reset_labels(self.grid_frame)
 
     def _pick(self, d: date):
         self.on_pick(d)
         self.destroy()
+
+
+class ToggleSwitch(tk.Canvas):
+    """Small on/off switch drawn on a canvas (the flat theme has no switch graphic).
+    Calls command() after the value changes; recolor() is called on theme changes."""
+
+    W, H = 40, 22
+
+    def __init__(self, parent, variable: tk.BooleanVar, command=None):
+        super().__init__(parent, width=self.W, height=self.H, highlightthickness=0,
+                         borderwidth=0, cursor="hand2", takefocus=1)
+        self.var, self.command = variable, command
+        self.bind("<Button-1>", self.toggle)
+        self.bind("<space>", self.toggle)
+        self.var.trace_add("write", lambda *_: self.recolor())
+        self.recolor()
+
+    def toggle(self, _=None):
+        self.var.set(not self.var.get())
+        if self.command:
+            self.command()
+
+    def recolor(self):
+        p = theme.palette(self)
+        on = bool(self.var.get())
+        self.delete("all")
+        self.configure(background=p["bg"])
+        w, h, r = self.W - 2, self.H - 2, (self.H - 2) // 2
+        fill, outline = (p["accent"], p["accent"]) if on else (p["input_bg"], p["muted"])
+        # Rounded track: two end circles joined by a rectangle.
+        self.create_oval(1, 1, 1 + h, 1 + h, fill=fill, outline=outline)
+        self.create_oval(w - h + 1, 1, w + 1, 1 + h, fill=fill, outline=outline)
+        self.create_rectangle(1 + r, 1, w + 1 - r, 1 + h, fill=fill, outline="")
+        self.create_line(1 + r, 1, w + 1 - r, 1, fill=outline)
+        self.create_line(1 + r, 1 + h, w + 1 - r, 1 + h, fill=outline)
+        knob = p["accent_fg"] if on else p["muted"]
+        cx = w + 1 - r if on else 1 + r
+        k = r - 5
+        self.create_oval(cx - k, 1 + r - k, cx + k, 1 + r + k, fill=knob, outline="")
 
 
 class DateField(ttk.Frame):
@@ -164,7 +201,6 @@ class SetupDialog(tk.Toplevel):
         ttk.Button(buttons, text="Save", style="Accent.TButton", command=self.save).pack(side="right")
         ttk.Button(buttons, text="Skip for now" if first_run else "Cancel",
                    command=self.destroy).pack(side="right", padx=6)
-        theme.reset_labels(self)
         self.grab_set()
         self.focus_set()
 

@@ -10,7 +10,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ["APPDATA"] = tempfile.mkdtemp()
 
-from renamer import theme  # noqa: E402
 from renamer.app import App  # noqa: E402
 
 folder = Path(tempfile.mkdtemp())
@@ -30,7 +29,7 @@ def count(w):
     return 1 + sum(count(c) for c in w.winfo_children())
 
 
-def timed(fn, runs=4):
+def timed(fn, runs=6):
     out = []
     for _ in range(runs):
         t = time.perf_counter()
@@ -40,104 +39,18 @@ def timed(fn, runs=4):
     return f"median {statistics.median(out):6.0f} ms   (runs: {', '.join(f'{x:.0f}' for x in out)})"
 
 
-def flip():
-    app.dark_var.set(not app.dark_var.get())
+def click_switch():
+    app.dark_switch.toggle()
 
 
-def current():
-    flip()
-    app.toggle_theme()
+def type_letter():
+    app.vars["script"].set(app.vars["script"].get() + "a")
 
 
-def plain():
-    flip()
-    app.theme_mode = "dark" if app.dark_var.get() else "light"
-    app.palette = theme.apply(app, app.theme_mode)
-    app._color_tags()
-    app.refresh()
-
-
-def withdrawn():
-    app.withdraw()
-    plain()
-    app.update()
-    app.deiconify()
-
-
-def repaint_only():
-    # Cost of Windows repainting the whole window once, without any theme change.
-    w = app.winfo_width()
-    app.geometry(f"{w - 1}x1040")
-    app.update()
-    app.geometry(f"{w}x1040")
-
-
-import sv_ttk  # noqa: E402
-from tkinter import ttk  # noqa: E402
-
-results = [f"widgets: {count(app)}", f"tk scaling: {app.tk.call('tk', 'scaling')}"]
-results.append(f"toggle (current build)   : {timed(current)}")
-results.append(f"toggle without freeze    : {timed(plain)}")
-
-
-def other():
-    return "light" if app.theme_mode == "dark" else "dark"
-
-
-def step_theme_use():
-    app.theme_mode = other()
-    sv_ttk.set_theme(app.theme_mode, app)
-
-
-def step_styles():
-    p = theme.PALETTES[app.theme_mode]
-    st = ttk.Style(app)
-    for name in ("Subtitle.TLabel", "Muted.TLabel", "Field.TLabel"):
-        st.configure(name, foreground=p["muted"])
-    st.configure("Missing.TLabel", foreground=p["error"])
-    st.configure("Treeview", rowheight=32)
-
-
-results.append(f"step: sv_ttk.set_theme   : {timed(step_theme_use)}")
-results.append(f"step: style configures   : {timed(step_styles)}")
-results.append(f"step: refresh()          : {timed(app.refresh)}")
-results.append(f"step: reset_labels       : {timed(lambda: theme.reset_labels(app))}")
-results.append(f"step: style_window       : {timed(lambda: theme.style_window(app))}")
-
-# Prepared styles: configure custom styles once per theme, then a switch is theme_use only.
-for mode in ("dark", "light"):
-    theme.apply(app, mode)
-app.update()
-
-
-def prepared():
-    app.theme_mode = other()
-    sv_ttk.set_theme(app.theme_mode, app)
-    app.palette = theme.PALETTES[app.theme_mode]
-    app._color_tags()
-    app.configure(background=app.palette["bg"])
-
-
-results.append(f"toggle prepared styles   : {timed(prepared)}")
-app.tk.eval("proc tk_setPalette args {}")
-results.append(f"prepared w/o setPalette  : {timed(prepared)}")
-
-# Same window on Tk's built-in flat "clam" theme, switching colors only.
-st = ttk.Style(app)
-st.theme_use("clam")
-app.update()
-flat = {"dark": ("#1c1c1c", "#fafafa", "#2b2b2b"), "light": ("#fafafa", "#1c1c1c", "#ffffff")}
-
-
-def clam_swap():
-    app.theme_mode = other()
-    bg, fg, field = flat[app.theme_mode]
-    st.configure(".", background=bg, foreground=fg, fieldbackground=field)
-    st.configure("Treeview", background=field, fieldbackground=field, foreground=fg)
-
-
-results.append(f"flat theme color swap    : {timed(clam_swap)}")
-
+results = [f"widgets: {count(app)}", f"tk scaling: {app.tk.call('tk', 'scaling')}",
+           f"dark mode switch : {timed(click_switch)}",
+           f"typing a letter  : {timed(type_letter)}",
+           f"preview refresh  : {timed(app.refresh)}"]
 report = "\n".join(results)
 print(report)
 summary = os.environ.get("GITHUB_STEP_SUMMARY")

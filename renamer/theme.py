@@ -1,24 +1,39 @@
-"""Light/dark theme: Sun Valley (Windows 11 style) ttk theme plus the app's own
-colors for text, statuses and plain tk widgets."""
+"""Flat light/dark theme built on Tk's 'clam' engine.
+
+An image-based theme (sv-ttk) looked similar but took ~0.4-0.7 s to switch on
+Windows because every widget is redrawn from images; flat colors switch in
+~60 ms. Both themes are created once, so switching is a single theme_use().
+"""
 
 import sys
 import tkinter as tk
-from contextlib import contextmanager
+from tkinter import font as tkfont
 from tkinter import ttk
-
-import sv_ttk
 
 PALETTES = {
     "light": {
-        "bg": "#fafafa", "fg": "#1c1c1c", "muted": "#616161", "border": "#e5e5e5",
-        "error": "#c42b1c", "warn": "#9d5d00", "ok": "#0f7b0f", "accent": "#005fb8",
-        "input_bg": "#ffffff", "select_bg": "#cce4f7",
+        "bg": "#f7f7f8", "fg": "#1b1b1f", "muted": "#5f6368", "border": "#dadce0",
+        "input_bg": "#ffffff", "button": "#ffffff", "button_hover": "#f1f3f4",
+        "button_pressed": "#e8eaed", "heading": "#f1f3f4", "select_bg": "#d3e3fd",
+        "accent": "#0b57d0", "accent_hover": "#1a66e0", "accent_pressed": "#0842a0",
+        "accent_fg": "#ffffff", "thumb": "#c4c7c5", "thumb_hover": "#9aa0a6",
+        "error": "#c5221f", "warn": "#9a5b00", "ok": "#137333", "disabled": "#9aa0a6",
     },
     "dark": {
-        "bg": "#1c1c1c", "fg": "#fafafa", "muted": "#a6a6a6", "border": "#3a3a3a",
-        "error": "#ff99a4", "warn": "#fce100", "ok": "#6ccb5f", "accent": "#57c8ff",
-        "input_bg": "#2b2b2b", "select_bg": "#264f78",
+        "bg": "#1e1f22", "fg": "#e8eaed", "muted": "#9aa0a6", "border": "#3c4043",
+        "input_bg": "#2a2b2e", "button": "#2f3033", "button_hover": "#3a3b3e",
+        "button_pressed": "#45464a", "heading": "#2a2b2e", "select_bg": "#264a7a",
+        "accent": "#8ab4f8", "accent_hover": "#a3c4fa", "accent_pressed": "#6f9ef0",
+        "accent_fg": "#0b1a33", "thumb": "#55585c", "thumb_hover": "#70747a",
+        "error": "#f28b82", "warn": "#fdd663", "ok": "#81c995", "disabled": "#5f6368",
     },
+}
+
+FONTS = {  # name: (family candidates, size, weight)
+    "AppBody": (("Segoe UI", "Helvetica"), 10, "normal"),
+    "AppStrong": (("Segoe UI Semibold", "Segoe UI", "Helvetica"), 10, "bold"),
+    "AppCaption": (("Segoe UI", "Helvetica"), 9, "normal"),
+    "AppTitle": (("Segoe UI Semibold", "Segoe UI", "Helvetica"), 15, "bold"),
 }
 
 
@@ -40,32 +55,143 @@ def palette(widget: tk.Misc) -> dict:
     return PALETTES[getattr(widget._root(), "theme_mode", "light")]
 
 
+def _create_fonts(root: tk.Tk) -> None:
+    families = set(tkfont.families(root))
+    for name, (candidates, size, weight) in FONTS.items():
+        family = next((f for f in candidates if f in families), "TkDefaultFont")
+        # "Semibold" families are already heavy; don't double the weight.
+        w = "normal" if "Semibold" in family else weight
+        try:
+            tkfont.nametofont(name, root).configure(family=family, size=size, weight=w)
+        except tk.TclError:
+            tkfont.Font(root, name=name, family=family, size=size, weight=w)
+
+
+def _settings(p: dict) -> dict:
+    flat = {"lightcolor": p["bg"], "darkcolor": p["bg"], "bordercolor": p["border"]}
+    button = {
+        "configure": {"background": p["button"], "foreground": p["fg"], "padding": (12, 5),
+                      "relief": "flat", "borderwidth": 1, "anchor": "center",
+                      "bordercolor": p["border"], "lightcolor": p["button"],
+                      "darkcolor": p["button"], "focuscolor": p["button"]},
+        "map": {"background": [("pressed", p["button_pressed"]), ("active", p["button_hover"])],
+                "lightcolor": [("pressed", p["button_pressed"]), ("active", p["button_hover"])],
+                "darkcolor": [("pressed", p["button_pressed"]), ("active", p["button_hover"])],
+                "foreground": [("disabled", p["disabled"])]},
+        "layout": [("Button.border", {"sticky": "nswe", "border": "1", "children": [
+            ("Button.padding", {"sticky": "nswe", "children": [
+                ("Button.label", {"sticky": "nswe"})]})]})],
+    }
+
+    def label(**kw):
+        return {"configure": {"background": p["bg"], **kw}}
+
+    field = {"fieldbackground": p["input_bg"], "foreground": p["fg"], "bordercolor": p["border"],
+             "lightcolor": p["input_bg"], "darkcolor": p["input_bg"], "insertcolor": p["fg"],
+             "selectbackground": p["select_bg"], "selectforeground": p["fg"], "padding": (8, 5)}
+    field_map = {"bordercolor": [("focus", p["accent"])],
+                 "lightcolor": [("focus", p["accent"])], "darkcolor": [("focus", p["accent"])]}
+    accent_states = [("pressed", p["accent_pressed"]), ("active", p["accent_hover"])]
+    hover_states = [("pressed", p["button_pressed"]), ("active", p["button_hover"])]
+    return {
+        ".": {"configure": {"background": p["bg"], "foreground": p["fg"], "font": "AppBody",
+                            "troughcolor": p["bg"], "selectbackground": p["select_bg"],
+                            "selectforeground": p["fg"], "insertcolor": p["fg"],
+                            "fieldbackground": p["input_bg"], "focuscolor": p["accent"],
+                            **flat},
+              "map": {"foreground": [("disabled", p["disabled"])]}},
+        "TFrame": {"configure": {"background": p["bg"]}},
+        "Card.TFrame": {"configure": {"background": p["bg"], "relief": "solid", "borderwidth": 1,
+                                      **flat}},
+        "TLabel": label(foreground=p["fg"]),
+        "Title.TLabel": label(font="AppTitle", foreground=p["fg"]),
+        "Subtitle.TLabel": label(font="AppBody", foreground=p["muted"]),
+        "Section.TLabel": label(font="AppStrong", foreground=p["fg"]),
+        "Muted.TLabel": label(font="AppCaption", foreground=p["muted"]),
+        "Field.TLabel": label(font="AppCaption", foreground=p["muted"]),
+        "Missing.TLabel": label(font="AppCaption", foreground=p["error"]),
+        "Ok.TLabel": label(font="AppStrong", foreground=p["ok"]),
+        "Error.TLabel": label(font="AppStrong", foreground=p["error"]),
+        "Empty.TLabel": {"configure": {"background": p["input_bg"], "foreground": p["muted"],
+                                       "font": "AppBody"}},
+        "TButton": button,
+        "Accent.TButton": {
+            "configure": {"background": p["accent"], "foreground": p["accent_fg"],
+                          "bordercolor": p["accent"], "lightcolor": p["accent"],
+                          "darkcolor": p["accent"], "focuscolor": p["accent"],
+                          "padding": (18, 6), "font": "AppStrong"},
+            "map": {"background": accent_states, "bordercolor": accent_states,
+                    "lightcolor": accent_states, "darkcolor": accent_states,
+                    "foreground": [("disabled", p["disabled"])]}},
+        "Toolbutton": {
+            "configure": {"background": p["bg"], "foreground": p["fg"], "padding": (6, 4),
+                          "relief": "flat", "borderwidth": 1, "anchor": "center",
+                          "lightcolor": p["bg"], "darkcolor": p["bg"], "bordercolor": p["bg"],
+                          "focuscolor": p["bg"]},
+            "map": {"background": hover_states, "lightcolor": hover_states,
+                    "darkcolor": hover_states, "bordercolor": hover_states},
+            "layout": button["layout"]},
+        "Today.Toolbutton": {"configure": {"foreground": p["accent"], "font": "AppStrong"}},
+        "TEntry": {"configure": field,
+                   "map": {**field_map, "fieldbackground": [("readonly", p["input_bg"])]}},
+        "TCombobox": {
+            "configure": {**field, "background": p["input_bg"], "arrowcolor": p["muted"],
+                          "arrowsize": 13},
+            "map": {**field_map,
+                    "fieldbackground": [("readonly", p["input_bg"])],
+                    "background": [("active", p["button_hover"]), ("readonly", p["input_bg"])],
+                    "selectbackground": [("readonly", p["input_bg"])],
+                    "selectforeground": [("readonly", p["fg"])],
+                    "foreground": [("disabled", p["disabled"])]}},
+        "Treeview": {
+            "configure": {"background": p["input_bg"], "fieldbackground": p["input_bg"],
+                          "foreground": p["fg"], "rowheight": 30, "borderwidth": 0,
+                          "bordercolor": p["border"], "lightcolor": p["input_bg"],
+                          "darkcolor": p["input_bg"]},
+            "map": {"background": [("selected", p["select_bg"])],
+                    "foreground": [("selected", p["fg"])]}},
+        "Treeview.Heading": {
+            "configure": {"background": p["heading"], "foreground": p["fg"], "font": "AppStrong",
+                          "relief": "flat", "padding": (6, 6), "bordercolor": p["border"],
+                          "lightcolor": p["heading"], "darkcolor": p["heading"]},
+            "map": {"background": [("active", p["button_hover"])]}},
+        "TScrollbar": {
+            "configure": {"background": p["thumb"], "troughcolor": p["input_bg"],
+                          "bordercolor": p["input_bg"], "lightcolor": p["thumb"],
+                          "darkcolor": p["thumb"], "arrowcolor": p["muted"], "gripcount": 0,
+                          "arrowsize": 12, "relief": "flat"},
+            "map": {"background": [("active", p["thumb_hover"])],
+                    "lightcolor": [("active", p["thumb_hover"])],
+                    "darkcolor": [("active", p["thumb_hover"])]}},
+    }
+
+
+def setup(root: tk.Tk) -> None:
+    """Create fonts and both themes once; call before building widgets."""
+    _create_fonts(root)
+    # Entry text uses a widget option, not the style, so set it for all inputs.
+    for pattern in ("*TEntry.font", "*TCombobox.font", "*TCombobox*Listbox.font"):
+        root.option_add(pattern, "AppBody", "interactive")
+    style = ttk.Style(root)
+    for mode, p in PALETTES.items():
+        name = f"bugmd-{mode}"
+        if name not in style.theme_names():
+            style.theme_create(name, parent="clam", settings=_settings(p))
+
+
 def apply(root: tk.Tk, mode: str) -> dict:
     """Switch the whole app to 'light' or 'dark'. Returns the palette."""
+    if "bugmd-light" not in ttk.Style(root).theme_names():
+        setup(root)
     root.theme_mode = mode
-    sv_ttk.set_theme(mode, root)
-    if not getattr(root, "_label_fix_bound", False):
-        # sv_ttk runs tk_setPalette on every <<ThemeChanged>> (also fired by any
-        # style change), which writes fixed colors onto every widget. For ttk labels
-        # that overrides their style colors, so clear them right after it runs.
-        # Bound after set_theme so it comes after sv_ttk's own handler.
-        root.bind_class("Tk", "<<ThemeChanged>>", lambda e: reset_labels(root), add="+")
-        root._label_fix_bound = True
     p = PALETTES[mode]
-    s = ttk.Style(root)
-    # Custom styles must be re-created after every theme switch.
-    s.configure("Title.TLabel", font="SunValleySubtitleFont")
-    s.configure("Subtitle.TLabel", font="SunValleyBodyFont", foreground=p["muted"])
-    s.configure("Section.TLabel", font="SunValleyBodyStrongFont")
-    s.configure("Muted.TLabel", font="SunValleyCaptionFont", foreground=p["muted"])
-    s.configure("Field.TLabel", font="SunValleyCaptionFont", foreground=p["muted"])
-    s.configure("Missing.TLabel", font="SunValleyCaptionFont", foreground=p["error"])
-    s.configure("Ok.TLabel", font="SunValleyBodyStrongFont", foreground=p["ok"])
-    s.configure("Error.TLabel", font="SunValleyBodyStrongFont", foreground=p["error"])
-    s.configure("Today.Toolbutton", foreground=p["accent"])
-    s.configure("Accent.TButton", padding=(18, 6, 18, 7))
-    s.configure("Treeview", rowheight=32)
-    s.configure("Treeview.Heading", font="SunValleyBodyStrongFont")
+    ttk.Style(root).theme_use(f"bugmd-{mode}")
+    # Combobox dropdown lists are plain tk Listboxes: new ones read these options,
+    # existing ones are recolored below.
+    for opt, key in (("background", "input_bg"), ("foreground", "fg"),
+                     ("selectBackground", "select_bg"), ("selectForeground", "fg")):
+        root.option_add(f"*TCombobox*Listbox.{opt}", p[key], "interactive")
+    _recolor_tk_widgets(root, p)
     style_window(root)
     for child in root.winfo_children():
         if isinstance(child, tk.Toplevel):
@@ -73,39 +199,19 @@ def apply(root: tk.Tk, mode: str) -> dict:
     return p
 
 
-@contextmanager
-def frozen(root: tk.Tk):
-    """Pause window painting on Windows while the UI changes, then repaint once.
-    Without this, a theme switch repaints widget by widget and looks laggy."""
-    hwnd = None
-    if sys.platform.startswith("win"):
-        try:
-            import ctypes
-            root.update_idletasks()
-            hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
-            ctypes.windll.user32.SendMessageW(hwnd, 0x000B, 0, 0)  # WM_SETREDRAW off
-        except Exception:
-            hwnd = None
-    try:
-        yield
-        root.update_idletasks()  # finish all layout and drawing work while hidden
-    finally:
-        if hwnd:
-            import ctypes
-            user32 = ctypes.windll.user32
-            user32.SendMessageW(hwnd, 0x000B, 1, 0)  # WM_SETREDRAW on
-            # RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW
-            user32.RedrawWindow(hwnd, None, None, 0x0004 | 0x0400 | 0x0001 | 0x0080 | 0x0100)
-            root.update_idletasks()
-
-
-def reset_labels(widget: tk.Misc) -> None:
-    """Clear the palette's fixed colors from every ttk label under widget.
-    Call after building a window, since new labels pick the palette up too."""
+def _recolor_tk_widgets(widget: tk.Misc, p: dict) -> None:
     for child in widget.winfo_children():
-        if isinstance(child, ttk.Label):
-            child.configure(foreground="", background="")
-        reset_labels(child)
+        if isinstance(child, ttk.Combobox):
+            try:
+                popdown = child.tk.call("ttk::combobox::PopdownWindow", child)
+                child.tk.call(f"{popdown}.f.l", "configure", "-background", p["input_bg"],
+                              "-foreground", p["fg"], "-selectbackground", p["select_bg"],
+                              "-selectforeground", p["fg"], "-borderwidth", 0)
+            except tk.TclError:
+                pass
+        elif hasattr(child, "recolor"):
+            child.recolor()
+        _recolor_tk_widgets(child, p)
 
 
 def style_window(win: tk.Misc) -> None:
